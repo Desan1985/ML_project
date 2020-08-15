@@ -1,0 +1,108 @@
+---
+title: "ML_project"
+author: "Martin"
+date: "8/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE, fig.width=10, fig.height=5)
+options(width=120)
+library(lattice)
+library(ggplot2)
+library(plyr)
+library(randomForest)
+library(xgboost)
+library(caret)
+```
+
+## Executive Summary
+
+Based on a dataset provide by HAR [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har), I will try to train a predictive model to predict what exercise was performed using a dataset with 159 features.
+
+I will use xgboost to train the model here.
+The final model have an accurracy of nearly 100 % on the training set, about 99% accurary on validation set.
+It can predict all 20 cases correctly in the quiz when using the test set.
+
+##  Downloading and reading data
+```{r, donwloading}
+trainURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(trainURL, "training.csv")
+    
+testURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testURL, "testing.csv")
+
+training = read.csv("training.csv",na.strings=c("NA","#DIV/0!",""))
+testing = read.csv("testing.csv",na.strings=c("NA","#DIV/0!",""))
+
+```
+
+## Removing variables with NA values and variables that are not needed
+
+```{r}
+n = NULL
+for (i in names(training)){
+    if(sum(is.na(training[,i]))/length(training[,i])<0.2){
+        n= c(n,i)
+    }
+}
+training2 <- training[,n]
+
+rm = c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window")
+rm = which(names(training2) %in% rm)
+training3 = training2[,-rm]
+training3$classe = factor(training3$classe)
+```
+
+## Convert all into integers, expect classe
+```{r}
+classeLevels <- levels(training2$classe)
+training4 <- data.frame(data.matrix(training3))
+training4$classe <- factor(training4$classe)
+str(training4)
+```
+
+
+## Data Partitioning
+splitting the data into training and validation sets. Test data will be our last data to predcit on.
+```{r}
+ind = createDataPartition(training4$classe,p=0.8,list = FALSE)
+traindat = training4[ind,]
+validation = training4[-ind,]
+```
+
+
+## Training
+We will use K fold cross validation with k=5.
+We will fit a model using XGBoost and use all variables as possible predictors for classe.
+These modeling may take a while...
+```{r, cache=TRUE}
+control <- trainControl(method="cv", 5, allowParallel = TRUE)
+modelXGB <- train(classe ~ ., data=traindat, method="xgbTree", trControl=control)
+modelXGB
+```
+
+## Predictions and performance of model on train and validation data
+```{r}
+predict1 <- predict(modelXGB, traindat)
+confusionMatrix(traindat$classe, predict1)
+
+predict2 <- predict(modelXGB, validation)
+confusionMatrix(validation$classe, predict2)
+```
+We can see that model is doing well both on training and validation data.
+On training set it achieved moren than 99% accuracy and on validation accuracy is also more than 99%.
+
+## Predicting Test Data
+
+In the first colum are the predictions for the given test set. 1=A , 2=B and so on.
+```{r}
+predictest <- predict(modelXGB, testing)
+testpred = cbind(predictest)
+testpred
+```
+
+
+
+
+
